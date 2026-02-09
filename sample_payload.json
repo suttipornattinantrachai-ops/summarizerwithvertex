@@ -1,0 +1,26 @@
+{
+  "date": "2026-02-09",
+  "kpi": {
+    "total_sales": 1250000,
+    "gross_margin_pct": 18.2,
+    "orders": 143
+  },
+  "top_customers": [
+    {
+      "name": "A Co",
+      "sales": 320000
+    },
+    {
+      "name": "B Co",
+      "sales": 210000
+    }
+  ],
+  "aging": {
+    "0_30": 900000,
+    "31_60": 220000,
+    "61_90": 110000,
+    "90_plus": 80000
+  },
+  "notes": "ปิดบิลย้อนหลัง 2 ใบ",
+  "table_preview_csv": "customer,sku,sales\nA Co,X-01,120000\nB Co,Y-09,210000\n"
+}
