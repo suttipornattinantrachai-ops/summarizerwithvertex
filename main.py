@@ -1,5 +1,6 @@
 import json
 import os
+import logging
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI
@@ -7,6 +8,16 @@ from pydantic import BaseModel, Field
 from google import genai
 
 app = FastAPI(title="RPA AI Summarizer", version="1.0.0")
+
+
+# -----------------------------
+# Logging
+# -----------------------------
+logging.basicConfig(
+    level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO),
+    format="%(asctime)s | %(levelname)s | %(message)s",
+)
+logger = logging.getLogger("rpa-ai-summarizer")
 
 # -----------------------------
 # Request/Response Schemas
@@ -143,11 +154,42 @@ def health():
 
 @app.post("/summarize_daily", response_model=SummarizeResponse)
 def summarize_daily(req: SummarizeRequest):
+    """
+    สรุปรายงานรายวัน (ออกแบบให้ไม่ทำให้ RPA ล้มทั้งงาน)
+    - ถ้าเรียกโมเดล/parse ไม่สำเร็จ จะคืน fallback พร้อม anomalies
+    - และจะ log exception + stage เพื่อให้ debug ได้จาก Cloud Run Logs
+    """
+    stage = "start"
+    prompt = None
+    raw = None
     try:
+        stage = "build_prompt"
         prompt = build_prompt(req)
+
+        stage = "call_gemini"
         raw = call_gemini(prompt)
+
+        stage = "safe_parse_json"
         data = safe_parse_json(raw)
+
+        stage = "validate_response"
         return SummarizeResponse.model_validate(data)
-    except Exception:
-        # ไม่โยน error เพื่อไม่ให้ RPA ล้มทั้งงาน
+
+    except Exception as e:
+        # ไม่โยน error เพื่อไม่ให้ RPA ล้มทั้งงาน แต่ต้อง log ให้ debug ได้
+        logger.exception(
+            "summarize_daily failed | stage=%s | date=%s | kpi_keys=%s | top_customers=%s | project=%s | location=%s | model=%s",
+            stage,
+            getattr(req, "date", None),
+            list(getattr(req, "kpi", {}) or {}),
+            len(getattr(req, "top_customers", []) or []),
+            os.getenv("GOOGLE_CLOUD_PROJECT"),
+            os.getenv("GOOGLE_CLOUD_LOCATION"),
+            os.getenv("MODEL_NAME"),
+        )
+
+        # ถ้ามี raw ตอบกลับจากโมเดล แต่ parse ไม่ผ่าน ให้ log เฉพาะส่วนต้น (กัน log ยาวเกิน)
+        if raw:
+            logger.error("raw_model_response_head: %s", str(raw)[:800])
+
         return make_fallback(req)
